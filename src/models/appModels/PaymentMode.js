@@ -9,7 +9,7 @@ const paymentModeSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
-
+  createdBy: { type: mongoose.Schema.ObjectId, ref: 'Admin', autopopulate: true, required: true },
   name: {
     type: String,
     required: true,

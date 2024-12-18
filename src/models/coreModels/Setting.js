@@ -9,7 +9,6 @@ const settingSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
-
   settingCategory: {
     type: String,
     required: true,
@@ -34,6 +33,11 @@ const settingSchema = new mongoose.Schema({
   isCoreSetting: {
     type: Boolean,
     default: false,
+  },
+  adminId: {  // New field to associate setting with an admin
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin',
+    required: true,
   },
 });
 

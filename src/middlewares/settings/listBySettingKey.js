@@ -1,29 +1,42 @@
 const mongoose = require('mongoose');
 
-const Model = mongoose.model('Setting');
+const SettingModel = mongoose.model('Setting');
+const UserSettingsModel = mongoose.model('UserSettings');
 
-const listBySettingKey = async ({ settingKeyArray = [] }) => {
+const listBySettingKey = async ({ settingKeyArray = [], userId }) => {
   try {
-    // Find document by id
-
-    const settingsToShow = { $or: [] };
+    if (!userId) {
+      throw new Error('User ID is required.');
+    }
 
     if (settingKeyArray.length === 0) {
       return [];
     }
 
-    for (const settingKey of settingKeyArray) {
-      settingsToShow.$or.push({ settingKey });
-    }
-    let results = await Model.find({ ...settings }).where('removed', false);
+    // Build queries for user-specific and global settings
+    const userSettingsQuery = {
+      user: userId,
+      removed: false,
+      $or: settingKeyArray.map((settingKey) => ({ settingKey })),
+    };
 
-    // If no results found, return document not found
-    if (results.length >= 1) {
-      return results;
-    } else {
-      return [];
-    }
-  } catch {
+    const globalSettingsQuery = {
+      removed: false,
+      $or: settingKeyArray.map((settingKey) => ({ settingKey })),
+    };
+
+    // Fetch user-specific and global settings
+    const [userSettings, globalSettings] = await Promise.all([
+      UserSettingsModel.find(userSettingsQuery),
+      SettingModel.find(globalSettingsQuery),
+    ]);
+
+    // Combine and return results
+    const allSettings = [...userSettings, ...globalSettings];
+
+    return allSettings;
+  } catch (error) {
+    console.error('Error in listBySettingKey:', error);
     return [];
   }
 };

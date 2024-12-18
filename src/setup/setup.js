@@ -2,8 +2,7 @@ require('dotenv').config({ path: '.env' });
 require('dotenv').config({ path: '.env.local' });
 const { globSync } = require('glob');
 const fs = require('fs');
-const { generate: uniqueId } = require('shortid');
-
+const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 mongoose.connect(process.env.DATABASE);
 
@@ -11,67 +10,101 @@ async function setupApp() {
   try {
     const Admin = require('../models/coreModels/Admin');
     const AdminPassword = require('../models/coreModels/AdminPassword');
-    const newAdminPassword = new AdminPassword();
+    const Setting = require('../models/coreModels/Setting');
+    const PaymentMode = require('../models/appModels/PaymentMode');
+    const Taxes = require('../models/appModels/Taxes');
 
-    const salt = uniqueId();
-
-    const passwordHash = newAdminPassword.generateHash(salt, 'admin123');
-
+    // Step 1: Create default admin
     const demoAdmin = {
-      email: 'admin@demo.com',
+      email: process.env.DEFAULT_ADMIN_EMAIL || 'admin@demo.com',
       name: 'IDURAR',
       surname: 'Admin',
       enabled: true,
       role: 'owner',
     };
-    const result = await new Admin(demoAdmin).save();
 
-    const AdminPasswordData = {
+    // Generate password hash using bcrypt
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(process.env.DEFAULT_ADMIN_PASSWORD || 'admin123', saltRounds);
+
+    const adminResult = await new Admin(demoAdmin).save();
+    const adminId = adminResult._id;
+
+    // Step 2: Create AdminPassword with the generated hash and salt
+    const adminPasswordData = {
       password: passwordHash,
       emailVerified: true,
-      salt: salt,
-      user: result._id,
+      salt: bcrypt.genSaltSync(saltRounds),  // Generate salt using bcrypt
+      user: adminId,
     };
-    await new AdminPassword(AdminPasswordData).save();
 
+    await new AdminPassword(adminPasswordData).save();
     console.log('👍 Admin created : Done!');
 
-    const Setting = require('../models/coreModels/Setting');
-
+    // Step 3: Import default settings and associate with admin
     const settingFiles = [];
-
     const settingsFiles = globSync('./src/setup/defaultSettings/**/*.json');
 
     for (const filePath of settingsFiles) {
       const file = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      file.forEach((setting) => {
+        setting.adminId = adminId; // Associate setting with admin
+      });
       settingFiles.push(...file);
     }
 
-    await Setting.insertMany(settingFiles);
+    const existingSettings = await Setting.find({ adminId });
+    const existingSettingKeys = existingSettings.map((s) => s.settingKey);
 
-    console.log('👍 Settings created : Done!');
+    const uniqueSettings = settingFiles.filter((setting) => 
+      !existingSettingKeys.includes(setting.settingKey)
+    );
 
-    const PaymentMode = require('../models/appModels/PaymentMode');
-    const Taxes = require('../models/appModels/Taxes');
+    if (uniqueSettings.length > 0) {
+      await Setting.insertMany(uniqueSettings);
+      console.log('👍 Settings created : Done!');
+    } else {
+      console.log('⚠️ No new settings to insert.');
+    }
 
-    await Taxes.insertMany([{ taxName: 'Tax 0%', taxValue: '0', isDefault: true }]);
-    console.log('👍 Taxes created : Done!');
+    // Step 4: Create default taxes and set createdBy field
+    const existingTaxes = await Taxes.find();
+    if (existingTaxes.length === 0) {
+      await Taxes.insertMany([
+        {
+          taxName: 'Tax 0%',
+          taxValue: '0',
+          isDefault: true,
+          createdBy: adminId, // Set createdBy to the admin's ID
+        },
+      ]);
+      console.log('👍 Taxes created : Done!');
+    } else {
+      console.log('⚠️ Taxes already exist.');
+    }
 
-    await PaymentMode.insertMany([
-      {
-        name: 'Default Payment',
-        description: 'Default Payment Mode (Cash , Wire Transfert)',
-        isDefault: true,
-      },
-    ]);
-    console.log('👍 PaymentMode created : Done!');
+    // Step 5: Create default payment mode and set createdBy field
+    const existingPaymentModes = await PaymentMode.find();
+    if (existingPaymentModes.length === 0) {
+      await PaymentMode.insertMany([
+        {
+          name: 'Default Payment',
+          description: 'Default Payment Mode (Cash, Wire Transfer)',
+          isDefault: true,
+          createdBy: adminId, // Set createdBy to the admin's ID
+        },
+      ]);
+      console.log('👍 PaymentMode created : Done!');
+    } else {
+      console.log('⚠️ Payment Modes already exist.');
+    }
 
-    console.log('🥳 Setup completed :Success!');
+    console.log('🥳 Setup completed : Success!');
     process.exit();
   } catch (e) {
     console.log('\n🚫 Error! The Error info is below');
     console.log(e);
-    process.exit();
+    process.exit(1);
   }
 }
 

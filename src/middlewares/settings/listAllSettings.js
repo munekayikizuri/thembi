@@ -1,20 +1,40 @@
 const mongoose = require('mongoose');
 
-const Model = mongoose.model('Setting');
+const SettingModel = mongoose.model('Setting');
+const UserSettingsModel = mongoose.model('UserSettings');
 
-const listAllSettings = async () => {
+const listAllSettings = async (userId) => {
   try {
-    //  Query the database for a list of all results
-    const result = await Model.find({
-      removed: false,
-    }).exec();
-
-    if (result.length > 0) {
-      return result;
-    } else {
+    if (!userId) {
+      console.error('No userId provided');
       return [];
     }
-  } catch {
+
+    // Fetch user-specific settings
+    const userSettings = await UserSettingsModel.find({ user: userId, removed: false });
+
+    // Fetch global settings
+    const globalSettings = await SettingModel.find({ removed: false });
+
+    // Convert user-specific settings to a map for quick lookup
+    const userSettingsMap = userSettings.reduce((acc, { settingKey, settingValue }) => {
+      acc[settingKey] = settingValue;
+      return acc;
+    }, {});
+
+    // Merge global settings, giving priority to user-specific settings
+    const allSettings = globalSettings.map((globalSetting) => {
+      const { settingKey, settingValue } = globalSetting;
+
+      return {
+        settingKey,
+        settingValue: userSettingsMap[settingKey] ?? settingValue, // Use user-specific if available, otherwise global
+      };
+    });
+
+    return allSettings;
+  } catch (error) {
+    console.error('Error in listAllSettings:', error);
     return [];
   }
 };

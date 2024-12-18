@@ -1,24 +1,24 @@
 const mongoose = require('mongoose');
+const SettingModel = mongoose.model('Setting');
+const UserSettingsModel = mongoose.model('UserSettings');
 
-const Model = mongoose.model('Setting');
-
-const readBySettingKey = async ({ settingKey }) => {
+const readBySettingKey = async ({ settingKey, userId }) => {
   try {
-    // Find document by id
+    // Check for user-specific settings first
+    let setting = null;
 
-    if (!settingKey) {
-      return null;
+    if (userId) {
+      setting = await UserSettingsModel.findOne({ settingKey, user: userId, removed: false });
     }
 
-    const result = await Model.findOne({ settingKey });
-    // If no results found, return document not found
-    if (!result) {
-      return null;
-    } else {
-      // Return success resposne
-      return result;
+    // If no user-specific setting found, fall back to global settings
+    if (!setting) {
+      setting = await SettingModel.findOne({ settingKey, removed: false });
     }
-  } catch {
+
+    return setting;
+  } catch (error) {
+    console.error('Error in readBySettingKey:', error);
     return null;
   }
 };

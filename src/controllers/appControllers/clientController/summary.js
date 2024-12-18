@@ -21,6 +21,8 @@ const summary = async (Model, req, res) => {
   let startDate = currentDate.clone().startOf(defaultType);
   let endDate = currentDate.clone().endOf(defaultType);
 
+  const adminId = new mongoose.Types.ObjectId(req.admin._id); // Ensure admin specificity
+
   const pipeline = [
     {
       $facet: {
@@ -29,6 +31,7 @@ const summary = async (Model, req, res) => {
             $match: {
               removed: false,
               enabled: true,
+              createdBy: adminId, // Filter by admin
             },
           },
           {
@@ -39,8 +42,9 @@ const summary = async (Model, req, res) => {
           {
             $match: {
               removed: false,
-              created: { $gte: startDate.toDate(), $lte: endDate.toDate() },
               enabled: true,
+              createdBy: adminId, // Filter by admin
+              created: { $gte: startDate.toDate(), $lte: endDate.toDate() },
             },
           },
           {
@@ -48,6 +52,13 @@ const summary = async (Model, req, res) => {
           },
         ],
         activeClients: [
+          {
+            $match: {
+              removed: false,
+              enabled: true,
+              createdBy: adminId, // Filter by admin
+            },
+          },
           {
             $lookup: {
               from: InvoiceModel.collection.name,
@@ -59,6 +70,7 @@ const summary = async (Model, req, res) => {
           {
             $match: {
               'invoice.removed': false,
+              'invoice.createdBy': adminId, // Ensure invoices belong to the admin
             },
           },
           {
@@ -74,24 +86,34 @@ const summary = async (Model, req, res) => {
     },
   ];
 
-  const aggregationResult = await Model.aggregate(pipeline);
+  try {
+    const aggregationResult = await Model.aggregate(pipeline);
 
-  const result = aggregationResult[0];
-  const totalClients = result.totalClients[0] ? result.totalClients[0].count : 0;
-  const totalNewClients = result.newClients[0] ? result.newClients[0].count : 0;
-  const activeClients = result.activeClients[0] ? result.activeClients[0].count : 0;
+    const result = aggregationResult[0];
+    const totalClients = result.totalClients[0] ? result.totalClients[0].count : 0;
+    const totalNewClients = result.newClients[0] ? result.newClients[0].count : 0;
+    const activeClients = result.activeClients[0] ? result.activeClients[0].count : 0;
 
-  const totalActiveClientsPercentage = totalClients > 0 ? (activeClients / totalClients) * 100 : 0;
-  const totalNewClientsPercentage = totalClients > 0 ? (totalNewClients / totalClients) * 100 : 0;
+    const totalActiveClientsPercentage = totalClients > 0 ? (activeClients / totalClients) * 100 : 0;
+    const totalNewClientsPercentage = totalClients > 0 ? (totalNewClients / totalClients) * 100 : 0;
 
-  return res.status(200).json({
-    success: true,
-    result: {
-      new: Math.round(totalNewClientsPercentage),
-      active: Math.round(totalActiveClientsPercentage),
-    },
-    message: 'Successfully get summary of new clients',
-  });
+    return res.status(200).json({
+      success: true,
+      result: {
+        new: Math.round(totalNewClientsPercentage),
+        active: Math.round(totalActiveClientsPercentage),
+      },
+      message: 'Successfully fetched summary of clients',
+    });
+  } catch (error) {
+    console.error('Error fetching summary:', error);
+    return res.status(500).json({
+      success: false,
+      result: null,
+      message: 'Internal server error',
+      error: error.message,
+    });
+  }
 };
 
 module.exports = summary;

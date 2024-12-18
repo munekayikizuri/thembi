@@ -1,8 +1,8 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
+require('dotenv').config({ path: '.env' });
 const authUser = async (req, res, { user, databasePassword, password, UserPasswordModel }) => {
-  const isMatch = await bcrypt.compare(databasePassword.salt + password, databasePassword.password);
+  const isMatch = await bcrypt.compare(password, databasePassword.password);
 
   if (!isMatch)
     return res.status(403).json({
@@ -42,7 +42,6 @@ const authUser = async (req, res, { user, databasePassword, password, UserPasswo
       result: {
         _id: user._id,
         name: user.name,
-        surname: user.surname,
         role: user.role,
         email: user.email,
         photo: user.photo,

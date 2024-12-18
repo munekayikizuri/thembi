@@ -1,31 +1,25 @@
 const mongoose = require('mongoose');
+const UserSettings = mongoose.model('UserSettings');  // Change to UserSettings model
 
-const Model = mongoose.model('Setting');
-
-const updateBySettingKey = async ({ settingKey, settingValue }) => {
+const updateBySettingKey = async ({ settingKey, adminId, updateData }) => {
   try {
-    if (!settingKey || !settingValue) {
+    // Ensure that the updateData is valid for the fields you're updating
+    const result = await UserSettings.findOneAndUpdate(
+      { settingKey, user: adminId },  // Matching by admin ID (user field) and setting key
+      updateData,
+      { new: true, runValidators: true }  // Return the updated document and validate the update
+    ).exec();
+
+    // If no record is found for the adminId and settingKey, return null
+    if (!result) {
+      console.error(`No setting found for settingKey: ${settingKey} and adminId: ${adminId}`);
       return null;
     }
 
-    const result = await Model.findOneAndUpdate(
-      { settingKey },
-      {
-        settingValue,
-      },
-      {
-        new: true, // return the new result instead of the old one
-        runValidators: true,
-      }
-    ).exec();
-    // If no results found, return document not found
-    if (!result) {
-      return null;
-    } else {
-      // Return success resposne
-      return result;
-    }
-  } catch {
+    // Return the updated result (user's setting)
+    return result;
+  } catch (error) {
+    console.error('Error in updateBySettingKey:', error);
     return null;
   }
 };

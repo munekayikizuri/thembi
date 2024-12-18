@@ -30,8 +30,13 @@ const adminSchema = new Schema({
   role: {
     type: String,
     default: 'owner',
-    enum: ['owner'],
+    enum: ['owner', 'admin', 'manager'],
   },
+  country: {
+    type: String,
+  },
+  clients: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Client' }], // Array of Client IDs
+  
 });
 
 module.exports = mongoose.model('Admin', adminSchema);

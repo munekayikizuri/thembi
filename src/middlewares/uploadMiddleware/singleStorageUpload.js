@@ -1,58 +1,83 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 const { slugify } = require('transliteration');
-
 const fileFilter = require('./utils/LocalfileFilter');
 
+// Utility function to ensure the directory exists
+const ensureDirExists = (dirPath) => {
+  try {
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+      console.log(`Directory created: ${dirPath}`);
+    }
+  } catch (error) {
+    console.error('Error creating directory:', error);
+  }
+};
+
+// Main upload middleware function
 const singleStorageUpload = ({
   entity,
   fileType = 'default',
   uploadFieldName = 'file',
   fieldName = 'file',
 }) => {
-  var diskStorage = multer.diskStorage({
+  const diskStorage = multer.diskStorage({
     destination: function (req, file, cb) {
-      cb(null, `src/public/uploads/${entity}`);
+      try {
+        const adminId = req.user?.id?.toString();
+        if (!adminId) {
+          return cb(new Error('Admin ID is missing from the request.'));
+        }
+
+        const uploadDir = path.join(__dirname, '..', '..', 'public', 'uploads', entity, adminId);
+        ensureDirExists(uploadDir);
+
+        console.log(`[UPLOAD] Directory set: ${uploadDir}`);
+        cb(null, uploadDir);
+      } catch (error) {
+        console.error('Error setting upload directory:', error);
+        cb(error);
+      }
     },
     filename: function (req, file, cb) {
       try {
-        // fetching the file extension of the uploaded file
-        let fileExtension = path.extname(file.originalname);
-        let uniqueFileID = Math.random().toString(36).slice(2, 7); // generates unique ID of length 5
+        const fileExtension = path.extname(file.originalname);
+        const uniqueFileID = Math.random().toString(36).slice(2, 7);
+        const originalName = req.body.seotitle
+          ? slugify(req.body.seotitle.toLowerCase())
+          : slugify(file.originalname.split('.')[0].toLowerCase());
+        const _fileName = `${originalName}-${uniqueFileID}${fileExtension}`;
 
-        let originalname = '';
-        if (req.body.seotitle) {
-          originalname = slugify(req.body.seotitle.toLocaleLowerCase()); // convert any language to English characters
-        } else {
-          originalname = slugify(file.originalname.split('.')[0].toLocaleLowerCase()); // convert any language to English characters
-        }
+        const adminId = req.user?.id?.toString();
+        const filePath = path.join(
+          __dirname,
+          '..',
+          '..',
+          'public',
+          'uploads',
+          entity,
+          adminId,
+          _fileName
+        );
 
-        let _fileName = `${originalname}-${uniqueFileID}${fileExtension}`;
+        console.log(`[UPLOAD] File path set: ${filePath}`);
 
-        const filePath = `public/uploads/${entity}/${_fileName}`;
-        // saving file name and extension in request upload object
-        req.upload = {
-          fileName: _fileName,
-          fieldExt: fileExtension,
-          entity: entity,
-          fieldName: fieldName,
-          fileType: fileType,
-          filePath: filePath,
-        };
-
+        req.upload = { fileName: _fileName, filePath, fileType, fieldName };
         req.body[fieldName] = filePath;
 
         cb(null, _fileName);
       } catch (error) {
-        cb(error); // pass the error to the callback
+        console.error('Error setting file name:', error);
+        cb(error);
       }
     },
   });
 
-  let filterType = fileFilter(fileType);
+  const filterType = fileFilter(fileType);
 
-  const multerStorage = multer({ storage: diskStorage, fileFilter: filterType }).single('file');
-  return multerStorage;
+  return multer({ storage: diskStorage, fileFilter: filterType }).single(uploadFieldName);
 };
 
 module.exports = singleStorageUpload;

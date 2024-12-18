@@ -9,6 +9,7 @@ const schema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  createdBy: { type: mongoose.Schema.ObjectId, ref: 'Admin', autopopulate: true, required: true },
 
   taxName: {
     type: String,

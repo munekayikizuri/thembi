@@ -6,7 +6,9 @@ const summary = require('./summary');
 const update = require('./update');
 const remove = require('./remove');
 const sendMail = require('./sendMail');
+const paginatedList = require('./paginatedList');
 
+methods.list = paginatedList;
 methods.mail = sendMail;
 methods.create = create;
 methods.update = update;
