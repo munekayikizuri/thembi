@@ -27,6 +27,7 @@
     "express": "^4.18.2",
     "express-fileupload": "^1.4.3",
     "express-rate-limit": "^7.1.5",
+    "git-filter-repo": "^0.0.30",
     "glob": "10.3.10",
     "googleapis": "^144.0.0",
     "html-pdf": "^3.0.1",
