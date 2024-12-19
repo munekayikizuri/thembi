@@ -47,9 +47,4 @@ app.get('*', (req, res) => {
 app.use(errorHandlers.notFound);
 app.use(errorHandlers.productionErrors);
 
-// Start the server
-const server = app.listen(process.env.PORT || 8888, () => {
-  console.log(`Express server running on port ${server.address().port}`);
-});
-
 module.exports = app;
