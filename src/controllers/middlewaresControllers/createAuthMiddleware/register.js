@@ -2,6 +2,8 @@ const Joi = require('joi');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const { globSync } = require('glob');
 require('dotenv').config({ path: '.env' });
 
 const register = async (req, res, { userModel }) => {
@@ -12,7 +14,7 @@ const register = async (req, res, { userModel }) => {
   const Taxes = mongoose.model('Taxes'); // Assuming a Taxes model
   const PaymentMode = mongoose.model('PaymentMode'); // Assuming a PaymentMode model
 
-  const { email, password, name, country } = req.body;
+  const { email, password, name, country, timezone, language } = req.body;
 
   // Validate input
   const objectSchema = Joi.object({
@@ -22,9 +24,11 @@ const register = async (req, res, { userModel }) => {
     password: Joi.string().required(),
     name: Joi.string().required(),
     country: Joi.string().required(),
+    timezone: Joi.string().required(), // Added timezone validation
+    language: Joi.string().optional(), // Optional language validation
   });
 
-  const { error } = objectSchema.validate({ email, password, name, country });
+  const { error } = objectSchema.validate({ email, password, name, country, timezone, language });
   if (error) {
     return res.status(409).json({
       success: false,
@@ -69,8 +73,35 @@ const register = async (req, res, { userModel }) => {
 
   await newUserPassword.save();
 
+  // Load and configure default settings
+  const settingData = [];
+  const settingsFiles = globSync('./src/setup/defaultSettings/**/*.json');
+  
+  // Update settings with provided values, associating them with the adminId
+  for (const filePath of settingsFiles) {
+    const file = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+    const settingsToUpdate = {
+      idurar_app_email: email,
+      idurar_app_company_email: email,
+      idurar_app_timezone: timezone,
+      idurar_app_country: country,
+      idurar_app_language: language || 'en_us',
+    };
+
+    const newSettings = file.map((x) => {
+      const settingValue = settingsToUpdate[x.settingKey];
+      return settingValue ? { ...x, settingValue, user: newUser._id } : { ...x, user: newUser._id };
+    });
+
+    settingData.push(...newSettings);
+  }
+
+  // Insert settings into the database
+  await UserSettings.insertMany(settingData);
+
   // Fetch the default settings for this new user
-  const defaultSettings = await Setting.find({ removed: false, isPrivate: false });
+  const defaultSettings = await UserSettings.find({ removed: false, isPrivate: false });
 
   const userSettings = defaultSettings
     .filter(setting => setting.settingValue !== null && setting.settingValue !== undefined)

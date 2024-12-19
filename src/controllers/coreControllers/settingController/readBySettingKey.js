@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
-const SettingModel = mongoose.model('Setting');
 const UserSettingsModel = mongoose.model('UserSettings');
 
 const readBySettingKey = async (req, res) => {
   try {
     const userId = req.user.id; // Authenticated user's ID
+    const adminId = req.user.adminId; // Admin ID from the authenticated user's context
     const settingKey = req.params.settingKey;
 
     if (!settingKey) {
@@ -15,7 +15,7 @@ const readBySettingKey = async (req, res) => {
       });
     }
 
-    // Check for user-specific settings first
+    // Fetch user-specific setting tied to the authenticated user and admin
     const userSetting = await UserSettingsModel.findOne({
       settingKey,
       user: userId, // Ensure the setting belongs to the authenticated user
@@ -30,21 +30,7 @@ const readBySettingKey = async (req, res) => {
       });
     }
 
-    // If no user-specific setting is found, check for global settings
-    const globalSetting = await SettingModel.findOne({
-      settingKey,
-      removed: false,
-    });
-
-    if (globalSetting) {
-      return res.status(200).json({
-        success: true,
-        result: globalSetting,
-        message: `Found global setting for settingKey: ${settingKey}`,
-      });
-    }
-
-    // If neither user-specific nor global setting is found, return a 404
+    // If no user-specific setting is found, return a 404
     return res.status(404).json({
       success: false,
       result: null,

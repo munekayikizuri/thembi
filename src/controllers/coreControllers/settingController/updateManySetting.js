@@ -1,11 +1,10 @@
 const mongoose = require('mongoose');
-
-const SettingModel = mongoose.model('Setting');
 const UserSettingsModel = mongoose.model('UserSettings');
 
 const updateManySetting = async (req, res) => {
   try {
     const userId = req.user.id; // Get the authenticated user's ID from the auth middleware
+    const adminId = req.user.adminId; // Admin ID from the authenticated user's context
     const { settings } = req.body;
 
     // Validate input
@@ -19,7 +18,6 @@ const updateManySetting = async (req, res) => {
 
     let settingsHasError = false;
     const userUpdates = [];
-    const globalUpdates = [];
 
     for (const setting of settings) {
       if (!setting.hasOwnProperty('settingKey') || !setting.hasOwnProperty('settingValue')) {
@@ -29,20 +27,12 @@ const updateManySetting = async (req, res) => {
 
       const { settingKey, settingValue } = setting;
 
-      // Add update for user-specific settings
+      // Add update for user-specific settings tied to both user and admin
       userUpdates.push({
         updateOne: {
-          filter: { settingKey, user: userId }, // Restrict to user-specific settings
+          filter: { settingKey, user: userId, adminId }, // Restrict to user-specific settings
           update: { settingValue },
           upsert: true, // Create if not exists
-        },
-      });
-
-      // Add update for global settings
-      globalUpdates.push({
-        updateOne: {
-          filter: { settingKey, removed: false }, // Restrict to global settings
-          update: { settingValue },
         },
       });
     }
@@ -55,7 +45,7 @@ const updateManySetting = async (req, res) => {
       });
     }
 
-    if (userUpdates.length === 0 && globalUpdates.length === 0) {
+    if (userUpdates.length === 0) {
       return res.status(400).json({
         success: false,
         result: null,
@@ -65,9 +55,8 @@ const updateManySetting = async (req, res) => {
 
     // Perform bulk updates
     const userResults = await UserSettingsModel.bulkWrite(userUpdates);
-    const globalResults = await SettingModel.bulkWrite(globalUpdates);
 
-    const totalModified = (userResults.modifiedCount || 0) + (globalResults.modifiedCount || 0);
+    const totalModified = userResults.modifiedCount || 0;
 
     if (totalModified < 1) {
       return res.status(200).json({
