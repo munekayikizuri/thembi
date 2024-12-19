@@ -14,7 +14,7 @@ const register = async (req, res, { userModel }) => {
   const Taxes = mongoose.model('Taxes'); // Assuming a Taxes model
   const PaymentMode = mongoose.model('PaymentMode'); // Assuming a PaymentMode model
 
-  const { email, password, name, country, timezone, language } = req.body;
+  const { email, password, name, country, language } = req.body;
   // console.log("The  Req Body:",req.body);
   // Validate input
   const objectSchema = Joi.object({
@@ -28,7 +28,7 @@ const register = async (req, res, { userModel }) => {
     language: Joi.string().optional(), // Optional language validation
   });
 
-  const { error } = objectSchema.validate({ email, password, name, country, timezone, language });
+  const { error } = objectSchema.validate({ email, password, name, country, language });
   if (error) {
     return res.status(409).json({
       success: false,
@@ -84,7 +84,6 @@ const register = async (req, res, { userModel }) => {
     const settingsToUpdate = {
       idurar_app_email: email,
       idurar_app_company_email: email,
-      idurar_app_timezone: country,
       idurar_app_country: country,
       idurar_app_language: language || 'en_us',
     };
