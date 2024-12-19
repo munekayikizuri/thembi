@@ -15,7 +15,7 @@ const register = async (req, res, { userModel }) => {
   const PaymentMode = mongoose.model('PaymentMode'); // Assuming a PaymentMode model
 
   const { email, password, name, country, timezone, language } = req.body;
-
+  console.log("The  Req Body:",req.body);
   // Validate input
   const objectSchema = Joi.object({
     email: Joi.string()
