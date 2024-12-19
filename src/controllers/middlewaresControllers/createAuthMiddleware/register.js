@@ -15,7 +15,7 @@ const register = async (req, res, { userModel }) => {
   const PaymentMode = mongoose.model('PaymentMode'); // Assuming a PaymentMode model
 
   const { email, password, name, country, timezone, language } = req.body;
-  console.log("The  Req Body:",req.body);
+  // console.log("The  Req Body:",req.body);
   // Validate input
   const objectSchema = Joi.object({
     email: Joi.string()
@@ -84,7 +84,7 @@ const register = async (req, res, { userModel }) => {
     const settingsToUpdate = {
       idurar_app_email: email,
       idurar_app_company_email: email,
-      idurar_app_timezone: timezone,
+      idurar_app_timezone: country,
       idurar_app_country: country,
       idurar_app_language: language || 'en_us',
     };
