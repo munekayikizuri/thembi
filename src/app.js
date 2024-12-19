@@ -17,7 +17,7 @@ const app = express();
 // Use CORS and other middlewares
 app.use(
   cors({
-    origin: ['http://localhost:3000', 'http://localhost:8888', 'https://thembi.onrender.com', 'https://thembi.kizuri.co.za'],
+    origin: ['http://localhost:3000', 'http://localhost:8888', 'https://thembi.onrender.com', 'https://thembi.kizuri.co.za', 'https://thembi.onrender.com/', 'https://thembi.kizuri.co.za/'],
     credentials: true,
     allowedHeaders: ['Authorization', 'Content-Type'],
   })
@@ -30,7 +30,7 @@ app.use(compression());
 
 // Serve static files from the dist folder
 // Assuming the frontend/dist folder is at the root level of your project
-app.use(express.static(path.join(__dirname, '../../www.thembi.kizuri.co.za')));
+app.use(express.static(path.join(__dirname, '../../frontend', 'dist')));
 
 // API Routes
 app.use('/api', coreAuthRouter);
@@ -41,7 +41,7 @@ app.use('/public', corePublicRouter);
 
 // Redirect all other routes to the index.html (for React Router handling)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../www.thembi.kizuri.co.za', 'index.html'));
+  res.sendFile(path.join(__dirname, '../../frontend', 'dist', 'index.html'));
 });
 
 // Error handling
