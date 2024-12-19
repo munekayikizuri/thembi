@@ -29,7 +29,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(compression());
 
 // Serve static files from the dist folder
-app.use(express.static(path.join(__dirname, 'dist')));
+app.use(express.static(path.join(__dirname,'..', 'dist')));
 
 // API Routes
 app.use('/api', coreAuthRouter);
@@ -40,7 +40,7 @@ app.use('/public', corePublicRouter);
 
 // Redirect all other routes to the index.html (for React Router handling)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  res.sendFile(path.join(__dirname,'..' ,'dist', 'index.html'));
 });
 
 // Error handling
