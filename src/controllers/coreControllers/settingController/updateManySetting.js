@@ -30,7 +30,7 @@ const updateManySetting = async (req, res) => {
       // Add update for user-specific settings tied to both user and admin
       userUpdates.push({
         updateOne: {
-          filter: { settingKey, user: userId, adminId }, // Restrict to user-specific settings
+          filter: { settingKey, user: userId }, // Restrict to user-specific settings
           update: { settingValue },
           upsert: true, // Create if not exists
         },
