@@ -5,15 +5,17 @@ const UserSettingsModel = mongoose.model('UserSettings');
 const listAll = async (req, res) => {
   try {
     const userId = req.user.id; // Authenticated user ID from middleware
+    const adminId = req.user.adminId; // Admin ID from the authenticated user's context
     const sort = parseInt(req.query.sort) || 'desc';
 
-    // Fetch global settings (from the Setting model)
+    // Fetch global settings specific to the admin (from the Setting model)
     const globalSettings = await SettingModel.find({
       removed: false,
       isPrivate: false, // Fetch non-private settings only
+      adminId: adminId, // Fetch settings specific to the admin
     }).sort({ created: sort });
 
-    // Fetch user-specific settings (from the UserSettings model)
+    // Fetch user-specific settings tied to both user and admin (from the UserSettings model)
     const userSettings = await UserSettingsModel.find({
       user: userId, // Match settings specific to the authenticated user
     }).sort({ created: sort });
