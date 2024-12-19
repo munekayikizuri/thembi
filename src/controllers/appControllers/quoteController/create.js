@@ -56,7 +56,7 @@ const create = async (req, res) => {
     console.log('Attempting to generate PDF at:', targetLocation);
 
     await custom.generatePdf(
-      'quote', // Model name for the Pug template
+      'Quote', // Model name for the Pug template
       info,
       result, // Quote data
       null, // Callback (optional)

@@ -57,7 +57,7 @@ const create = async (req, res) => {
     const info = { targetLocation, format: 'A4' };
 
     await pdfController.generatePdf(
-      'invoice', // Model name for the Pug template
+      'Invoice', // Model name for the Pug template
       info,
       result, // Invoice data
       null, // Callback (optional)
