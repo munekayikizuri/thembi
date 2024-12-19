@@ -16,7 +16,6 @@ const UserSettingsSchema = new mongoose.Schema({
   },
   settingValue: {
     type: mongoose.Schema.Types.Mixed, // The value can be of any type
-    required: true,
   },
   settingCategory: {
     type: String,
