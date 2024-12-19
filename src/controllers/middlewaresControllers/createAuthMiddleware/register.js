@@ -9,13 +9,12 @@ require('dotenv').config({ path: '.env' });
 const register = async (req, res, { userModel }) => {
   const UserPasswordModel = mongoose.model(userModel + 'Password');
   const UserModel = mongoose.model(userModel);
-  const Setting = mongoose.model('Setting');
   const UserSettings = mongoose.model('UserSettings');
-  const Taxes = mongoose.model('Taxes'); // Assuming a Taxes model
-  const PaymentMode = mongoose.model('PaymentMode'); // Assuming a PaymentMode model
+  const Taxes = mongoose.model('Taxes');
+  const PaymentMode = mongoose.model('PaymentMode');
 
-  const { email, password, name,timezone, country, language } = req.body;
-  // console.log("The  Req Body:",req.body);
+  const { email, password, name, timezone, country, language } = req.body;
+
   // Validate input
   const objectSchema = Joi.object({
     email: Joi.string()
@@ -24,8 +23,8 @@ const register = async (req, res, { userModel }) => {
     password: Joi.string().required(),
     name: Joi.string().required(),
     country: Joi.string().required(),
-    timezone: Joi.string().optional(), // Added timezone validation
-    language: Joi.string().optional(), // Optional language validation
+    timezone: Joi.string().optional(),
+    language: Joi.string().optional(),
   });
 
   const { error } = objectSchema.validate({ email, password, name, timezone, country, language });
@@ -74,10 +73,9 @@ const register = async (req, res, { userModel }) => {
   await newUserPassword.save();
 
   // Load and configure default settings
-  const settingData = [];
   const settingsFiles = globSync('./src/setup/defaultSettings/**/*.json');
-  
-  // Update settings with provided values, associating them with the adminId
+  const settingData = [];
+
   for (const filePath of settingsFiles) {
     const file = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
@@ -91,34 +89,22 @@ const register = async (req, res, { userModel }) => {
 
     const newSettings = file.map((x) => {
       const settingValue = settingsToUpdate[x.settingKey];
-      return settingValue ? { ...x, settingValue, user: newUser._id } : { ...x, user: newUser._id };
+      return {
+        ...x,
+        settingValue: settingValue || x.settingValue,
+        user: newUser._id,
+      };
     });
 
     settingData.push(...newSettings);
   }
 
-  // Insert settings into the database
-  await UserSettings.insertMany(settingData);
-
-  // Fetch the default settings for this new user
-  const defaultSettings = await UserSettings.find({ removed: false, isPrivate: false });
-
-  const userSettings = defaultSettings
-    .filter(setting => setting.settingValue !== null && setting.settingValue !== undefined)
-    .map(setting => ({
-      user: newUser._id,
-      settingKey: setting.settingKey,
-      settingValue: setting.settingValue,
-      settingCategory: setting.settingCategory,
-      valueType: setting.valueType,
-      isCoreSetting: setting.isCoreSetting || false,
-    }));
-
-  if (userSettings.length > 0) {
-    await UserSettings.insertMany(userSettings);
+  // Insert all user settings in one operation
+  if (settingData.length > 0) {
+    await UserSettings.insertMany(settingData);
   }
 
-  // Step 4: Create default taxes for the user
+  // Create default taxes for the user
   const existingTaxes = await Taxes.find({ createdBy: newUser._id });
   if (existingTaxes.length === 0) {
     await Taxes.insertMany([
@@ -134,7 +120,7 @@ const register = async (req, res, { userModel }) => {
     console.log('⚠️ Taxes already exist for this user.');
   }
 
-  // Step 5: Create default payment mode for the user
+  // Create default payment mode for the user
   const existingPaymentModes = await PaymentMode.find({ createdBy: newUser._id });
   if (existingPaymentModes.length === 0) {
     await PaymentMode.insertMany([
