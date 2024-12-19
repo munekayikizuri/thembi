@@ -30,7 +30,7 @@ app.use(compression());
 
 // Serve static files from the dist folder
 // Assuming the frontend/dist folder is at the root level of your project
-app.use(express.static(path.join(__dirname, '../../frontend', 'dist')));
+app.use(express.static(path.join(__dirname, '../../www.thembi.kizuri.co.za')));
 
 // API Routes
 app.use('/api', coreAuthRouter);
@@ -41,7 +41,7 @@ app.use('/public', corePublicRouter);
 
 // Redirect all other routes to the index.html (for React Router handling)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../frontend', 'dist', 'index.html'));
+  res.sendFile(path.join(__dirname, '../../www.thembi.kizuri.co.za', 'index.html'));
 });
 
 // Error handling
