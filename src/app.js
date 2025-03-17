@@ -17,7 +17,7 @@ const app = express();
 // Use CORS and other middlewares
 app.use(
   cors({
-    origin: ['http://localhost:3000', 'http://localhost:8888', 'https://thembi.onrender.com', 'https://thembi.kizuri.co.za', 'https://thembi.onrender.com/', 'https://thembi.kizuri.co.za/'],
+    origin: ['http://localhost:3000','http://thembi.ct.ws/?i=1', 'http://localhost:8888', 'https://thembi.onrender.com', 'https://thembi.kizuri.co.za', 'https://thembi.onrender.com/', 'https://thembi.kizuri.co.za/'],
     credentials: true,
     allowedHeaders: ['Authorization', 'Content-Type'],
   })
