@@ -3,6 +3,7 @@ const fs = require('fs');
 const moment = require('moment');
 let pdf = require('html-pdf');
 const { getData } = require('@/middlewares/serverData');
+const PdfStorage = require('@/models/appModels/PdfStorage');
 const useLanguage = require('@/locale/useLanguage');
 const { useMoney } = require('@/settings');
 const { settings_list } = require('@/locale/translation/en_us');
@@ -24,27 +25,22 @@ const loadAdminSettings = async (adminId) => {
     return acc;
   }, {});
 
-  console.log("Transformed Settings:", settings);
   return settings;
 };
 
 
 exports.generatePdf = async (modelName, info, result, callback, adminId) => {
   try {
-    const { targetLocation } = info;
-
-    // Delete existing PDF if it exists
-    if (fs.existsSync(targetLocation)) {
-      fs.unlinkSync(targetLocation);
-    }
-
-    // Fetch and simplify admin-specific settings
     const settings = await loadAdminSettings(adminId);
-
-    // Use settings directly
     const selectedLang = settings['idurar_app_language'];
     const translate = useLanguage({ selectedLang });
-
+    console.log('PDF Generation for:', modelName);  // Should show 'quote' or 'invoice'
+    console.log('PDF Generation:', {
+      modelName,
+      hasLogo: !!settings.company_logo,
+      logoPath: settings.company_logo,
+      publicPath: process.env.PUBLIC_SERVER_FILE
+    });
     const {
       currency_symbol,
       currency_position,
@@ -61,7 +57,6 @@ exports.generatePdf = async (modelName, info, result, callback, adminId) => {
       zero_format: settings['zero_format'],
     };
 
-    // Pass settings to the useMoney function
     const { moneyFormatter, amountFormatter } = useMoney({
       settings: {
         currency_symbol,
@@ -75,7 +70,6 @@ exports.generatePdf = async (modelName, info, result, callback, adminId) => {
 
     settings.public_server_file = process.env.PUBLIC_SERVER_FILE;
 
-    // Generate HTML content using pug
     const htmlContent = pug.renderFile('src/pdf/' + modelName + '.pug', {
       model: result,
       settings,
@@ -83,20 +77,35 @@ exports.generatePdf = async (modelName, info, result, callback, adminId) => {
       amountFormatter,
       moneyFormatter,
       moment: moment,
-      dateFormat: settings.idurar_app_date_format, // Pass the dateFormat here
+      dateFormat: settings.idurar_app_date_format,
     });
 
-    // Create PDF from the rendered HTML
-    pdf
-      .create(htmlContent, {
+    return new Promise((resolve, reject) => {
+      pdf.create(htmlContent, {
         format: info.format,
         orientation: 'portrait',
         border: '10mm',
-      })
-      .toFile(targetLocation, function (error) {
-        if (error) throw new Error(error);
-        if (callback) callback();
+      }).toBuffer(async (err, buffer) => {
+        if (err) reject(err);
+
+        try {
+          const filename = `${modelName.toLowerCase()}-${result._id}.pdf`;
+          const pdfDoc = new PdfStorage({
+            modelName,
+            documentId: result._id,
+            pdfData: buffer,
+            filename,
+            createdBy: adminId
+          });
+
+          await pdfDoc.save();
+          if (callback) callback();
+          resolve(pdfDoc);
+        } catch (error) {
+          reject(error);
+        }
       });
+    });
   } catch (error) {
     throw new Error(error);
   }

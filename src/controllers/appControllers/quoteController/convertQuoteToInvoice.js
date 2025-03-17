@@ -1,25 +1,17 @@
 const mongoose = require('mongoose');
-const Quote = mongoose.model('Quote'); // The Quote model
-const Invoice = mongoose.model('Invoice'); // The Invoice model
-const pdfController = require('@/controllers/pdfController'); // Adjust the path to your PDF controller
+const Quote = mongoose.model('Quote');
+const Invoice = mongoose.model('Invoice');
+const PdfStorage = mongoose.model('PdfStorage');
+const pdfController = require('@/controllers/pdfController');
 const { calculate } = require('@/helpers');
 const { increaseBySettingKey } = require('@/middlewares/settings');
-const path = require('path');
-const fs = require('fs');
-
-const ensureDirectoryExists = (filePath) => {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-};
 
 const convertQuoteToInvoice = async (req, res) => {
   try {
-    const { quoteId } = req.body; // Ensure the client provides the quote ID
-    const adminId = req.admin._id; // The admin performing the conversion
+    const quoteId = new mongoose.Types.ObjectId(req.params.id);
+    const adminId = req.admin._id;
 
-    // Fetch the quote to convert
+    // First check if quote exists
     const quote = await Quote.findOne({ _id: quoteId, createdBy: adminId }).exec();
     if (!quote) {
       return res.status(404).json({
@@ -29,7 +21,46 @@ const convertQuoteToInvoice = async (req, res) => {
       });
     }
 
-    // Prepare data for the invoice
+    // Get the settings
+    const UserSettings = require('@/models/coreModels/UserSettings');
+    
+    // Ensure all required settings exist
+    const requiredSettings = [
+      'idurar_app_language',
+      'currency_symbol',
+      'currency_position',
+      'decimal_sep',
+      'thousand_sep',
+      'cent_precision',
+      'zero_format',
+      'idurar_app_date_format'
+    ];
+
+    // Check if settings exist
+    const settingsExist = await UserSettings.find({
+      user: adminId,
+      settingKey: { $in: requiredSettings },
+      enabled: true
+    });
+
+    if (settingsExist.length < requiredSettings.length) {
+      return res.status(400).json({
+        success: false,
+        result: null,
+        message: 'Required settings are missing. Please configure your settings first.',
+      });
+    }
+
+    // Rest of your conversion code...
+    const settingResult = await increaseBySettingKey({
+      settingKey: 'last_invoice_number',
+      userId: adminId,
+    });
+
+    const nextInvoiceNumber = settingResult.settingValue;
+    const currentYear = new Date().getFullYear();
+
+    // Create invoice
     const invoiceData = {
       items: quote.items,
       taxRate: quote.taxRate,
@@ -37,54 +68,45 @@ const convertQuoteToInvoice = async (req, res) => {
       subTotal: quote.subTotal,
       taxTotal: quote.taxTotal,
       total: quote.total,
-      paymentStatus: 'unpaid', // Default to unpaid
+      paymentStatus: 'unpaid',
       createdBy: adminId,
+      client: quote.client,
+      year: currentYear,
+      number: nextInvoiceNumber,
+      status: 'pending',
+      date: new Date(),
+      expiredDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      converted: {
+        from: 'quote',
+        quote: quoteId
+      }
     };
 
-    // Create a new invoice
     const invoice = await new Invoice(invoiceData).save();
 
-    // Generate PDF for the invoice
-    const fileId = `invoice-${invoice._id}.pdf`;
-    const targetLocation = path.resolve(__dirname, '../../../public/download/invoice/', fileId);
-
-    // Ensure the directory exists
-    ensureDirectoryExists(targetLocation);
-
-    const info = { targetLocation, format: 'A4' };
-
-    await pdfController.generatePdf(
-      'invoice', // Model name for the Pug template
-      info,
-      invoice, // Invoice data
-      null, // Callback (optional)
-      adminId // Admin ID
+    // Generate PDF
+    const pdfDoc = await pdfController.generatePdf(
+      'invoice', 
+      { format: 'A4' },
+      invoice,
+      null,
+      adminId
     );
-
-    // Update the invoice with the PDF file reference
-    invoice.pdf = fileId;
-    await invoice.save();
-
-    // Increment the last invoice number setting
-    await increaseBySettingKey({
-      settingKey: 'last_invoice_number',
-      userId: adminId,
-    });
 
     return res.status(200).json({
       success: true,
       result: invoice,
       message: 'Quote successfully converted to invoice.',
     });
+
   } catch (error) {
     console.error('Error converting quote to invoice:', error);
     return res.status(500).json({
       success: false,
       result: null,
-      message: 'Internal server error',
+      message: 'Error converting quote to invoice',
       error: error.message,
     });
   }
 };
-
 module.exports = convertQuoteToInvoice;

@@ -1,61 +1,75 @@
 const paginatedList = async (Model, req, res) => {
-  const page = req.query.page || 1;
-  const limit = parseInt(req.query.items) || 10;
-  const skip = page * limit - limit;
+  try {
+    const page = req.query.page || 1;
+    const limit = parseInt(req.query.items) || 10;
+    const skip = page * limit - limit;
+    const { sortBy = 'created', sortValue = -1, filter, equal } = req.query;
 
-  const { sortBy = 'enabled', sortValue = -1, filter, equal } = req.query;
+    // Build base query
+    let baseQuery = {
+      removed: false,
+      createdBy: req.admin._id,
+    };
 
-  const fieldsArray = req.query.fields ? req.query.fields.split(',') : [];
+    // Add filter conditions if provided
+    if (filter && equal) {
+      baseQuery[filter] = equal;
+    }
 
-  let fields;
+    // Special handling for Invoice model to include drafts
+    if (Model.modelName === 'Invoice') {
+      baseQuery = {
+        ...baseQuery,
+        $or: [
+          { status: { $ne: 'draft' } },
+          { status: 'draft' }
+        ]
+      };
+    }
 
-  fields = fieldsArray.length === 0 ? {} : { $or: [] };
+    // Handle search fields if provided
+    const fieldsArray = req.query.fields ? req.query.fields.split(',') : [];
+    if (fieldsArray.length > 0 && req.query.q) {
+      const searchQuery = {
+        $or: fieldsArray.map(field => ({
+          [field]: { $regex: new RegExp(req.query.q, 'i') }
+        }))
+      };
+      baseQuery = { ...baseQuery, ...searchQuery };
+    }
 
-  for (const field of fieldsArray) {
-    fields.$or.push({ [field]: { $regex: new RegExp(req.query.q, 'i') } });
-  }
+    console.log('Query:', JSON.stringify(baseQuery, null, 2)); // Debug log
 
-  //  Query the database for a list of all results
-  const resultsPromise = Model.find({
-    removed: false,
+    const resultsPromise = Model.find(baseQuery)
+      .skip(skip)
+      .limit(limit)
+      .sort({ [sortBy]: sortValue })
+      .populate()
+      .exec();
 
-    [filter]: equal,
-    ...fields,
-  })
-    .skip(skip)
-    .limit(limit)
-    .sort({ [sortBy]: sortValue })
-    .populate()
-    .exec();
+    const countPromise = Model.countDocuments(baseQuery);
 
-  // Counting the total documents
-  const countPromise = Model.countDocuments({
-    removed: false,
+    const [result, count] = await Promise.all([resultsPromise, countPromise]);
 
-    [filter]: equal,
-    ...fields,
-  });
-  // Resolving both promises
-  const [result, count] = await Promise.all([resultsPromise, countPromise]);
+    console.log('Found results:', result.length); // Debug log
 
-  // Calculating total pages
-  const pages = Math.ceil(count / limit);
-
-  // Getting Pagination Object
-  const pagination = { page, pages, count };
-  if (count > 0) {
     return res.status(200).json({
       success: true,
       result,
-      pagination,
-      message: 'Successfully found all documents',
+      pagination: {
+        page,
+        pages: Math.ceil(count / limit),
+        count
+      },
+      message: count > 0 ? 'Successfully found all documents' : 'Collection is Empty'
     });
-  } else {
-    return res.status(203).json({
-      success: true,
+
+  } catch (error) {
+    console.error('PaginatedList Error:', error); // Debug log
+    return res.status(500).json({
+      success: false,
       result: [],
-      pagination,
-      message: 'Collection is Empty',
+      message: error.message
     });
   }
 };

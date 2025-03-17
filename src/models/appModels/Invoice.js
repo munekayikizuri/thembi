@@ -22,16 +22,22 @@ const invoiceSchema = new mongoose.Schema({
   },
   date: {
     type: Date,
-    required: true,
+    required: function() {
+      return this.status !== 'draft';
+    },
   },
   expiredDate: {
     type: Date,
-    required: true,
+    required: function() {
+      return this.status !== 'draft';
+    },
   },
   client: {
     type: mongoose.Schema.ObjectId,
     ref: 'Client',
-    required: true,
+    required: function() {
+      return this.status !== 'draft';
+    },
     autopopulate: true,
   },
   converted: {
@@ -48,51 +54,51 @@ const invoiceSchema = new mongoose.Schema({
       ref: 'Quote',
     },
   },
-  items: [
-    {
-      // product: {
-      //   type: mongoose.Schema.ObjectId,
-      //   ref: 'Product',
-      //   // required: true,
-      // },
+  items: {
+    type: [{
       itemName: {
         type: String,
-        required: true,
+        required: function() {
+          // Only required for non-draft items
+          return this.parent().parent().status && 
+                 this.parent().parent().status !== 'draft';
+        }
       },
-      description: {
-        type: String,
-      },
+      description: String,
       quantity: {
         type: Number,
         default: 1,
-        required: true,
+        required: function() {
+          return this.parent().parent().status && 
+                 this.parent().parent().status !== 'draft';
+        }
       },
       price: {
         type: Number,
-        required: true,
+        required: function() {
+          return this.parent().parent().status && 
+                 this.parent().parent().status !== 'draft';
+        }
       },
-      // discount: {
-      //   type: Number,
-      //   default: 0,
-      // },
-      // taxRate: {
-      //   type: Number,
-      //   default: 0,
-      // },
-      // subTotal: {
-      //   type: Number,
-      //   default: 0,
-      // },
-      // taxTotal: {
-      //   type: Number,
-      //   default: 0,
-      // },
       total: {
         type: Number,
-        required: true,
+        required: function() {
+          return this.parent().parent().status && 
+                 this.parent().parent().status !== 'draft';
+        }
+      }
+    }],
+    default: [], // Empty array by default
+    validate: {
+      validator: function(items) {
+        // Allow empty items array for drafts
+        if (this.status === 'draft') return true;
+        // For non-drafts, require at least one valid item
+        return items.length > 0;
       },
-    },
-  ],
+      message: 'At least one item is required for non-draft invoices'
+    }
+  },
   taxRate: {
     type: Number,
     default: 0,
@@ -174,6 +180,15 @@ const invoiceSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+
+// Add compound index for draft lookup
+invoiceSchema.index({
+  number: 1,
+  year: 1,
+  status: 1,
+  createdBy: 1
+});
+
 
 invoiceSchema.plugin(require('mongoose-autopopulate'));
 module.exports = mongoose.model('Invoice', invoiceSchema);

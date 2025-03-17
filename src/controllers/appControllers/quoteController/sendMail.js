@@ -6,6 +6,7 @@ const { SendInvoice, SendQuote, SendPaymentReceipt } = require('@/emailTemplate/
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
+const PdfStorage = require('@/models/appModels/PdfStorage');
 
 const mail = async (req, res) => {
   try {
@@ -40,7 +41,18 @@ const mail = async (req, res) => {
         message: `Quote with ID ${jsonData.id} not found.`,
       });
     }
+    // Fetch PDF from PdfStorage
+    const pdfDoc = await PdfStorage.findOne({
+      modelName: 'Quote',
+      documentId: quote._id
+    });
 
+    if (!pdfDoc || !pdfDoc.pdfData) {
+      return res.status(404).json({
+        success: false,
+        message: 'PDF document not found'
+      });
+    }
     // Fetch the client's email based on the client ID in the invoice
     const client = await Client.findById(quote.client).lean();
     if (!client) {
@@ -83,22 +95,24 @@ const mail = async (req, res) => {
       port: 587,
       secure: false, // Use TLS
       auth: {
-        user: '8213fc001@smtp-brevo.com', // Your Brevo SMTP username
-        pass: 'BS9D1I2F6gpNtqkb',        // Your Brevo SMTP password
+        user: "85c3c0001@smtp-brevo.com", // Your Brevo SMTP username
+        pass: "P0V9IMJp5rn6E4KW",        // Your Brevo SMTP password
       },
     });
 
     // Email options
     const mailOptions = {
-      from: `"Thembi CRM" <noreply@thembi.kizuri.co.za>`,
+      from: `"Thembi CRM" <munekayiantoine@gmail.com>`,
       to: client.email,
       subject: `Quote #${quote.number} - ${quote.year} From ${admin.name}`,
       html: htmlBody,
       replyTo: senderEmail,
       attachments: [
         {
-          filename: `Quote-${quote.number}.pdf`, // Customize the filename
-          path: path.resolve(__dirname, `../../../public/download/quote/${quote.pdf}`), // Correct absolute path
+         // filename: `Quote-${quote.number}.pdf`, // Customize the filename
+         // path: path.resolve(__dirname, `../../../public/download/quote/${quote.pdf}`), // Correct absolute path
+          filename: pdfDoc.filename,
+          content: pdfDoc.pdfData, // Use the PDF data from database
           contentType: 'application/pdf', // MIME type
         },
       ],
@@ -107,6 +121,7 @@ const mail = async (req, res) => {
 
     // Send email
     const info = await transporter.sendMail(mailOptions);
+    await Quote.findByIdAndUpdate(jsonData.id, { status: 'sent' });
 
     return res.status(200).json({
       success: true,

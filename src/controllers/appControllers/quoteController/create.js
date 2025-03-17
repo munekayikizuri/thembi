@@ -52,7 +52,7 @@ const create = async (req, res) => {
     ensureDirectoryExists(targetLocation);
 
     // Generate PDF immediately
-    const info = { targetLocation, format: 'A4' };
+    const info = { format: 'A4' };
     console.log('Attempting to generate PDF at:', targetLocation);
 
     await custom.generatePdf(

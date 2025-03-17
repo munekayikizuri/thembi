@@ -3,93 +3,99 @@ const Model = mongoose.model('Invoice');
 const { calculate } = require('@/helpers');
 const { increaseBySettingKey } = require('@/middlewares/settings');
 const schema = require('./schemaValidate');
-const pdfController = require('@/controllers/pdfController'); // Adjust to the correct path
+const pdfController = require('@/controllers/pdfController');
 
 const create = async (req, res) => {
   try {
     let body = req.body;
+    body.status = 'draft'; // All new invoices start as drafts
 
-    // Validate request body against schema
-    const { error, value } = schema.validate(body);
-    if (error) {
-      const { details } = error;
-      return res.status(400).json({
-        success: false,
-        result: null,
-        message: details[0]?.message,
-      });
+    // Get last invoice number for new invoices
+    if (!body.number) {
+      const lastInvoice = await Model.find({
+        createdBy: req.admin._id,
+      })
+      .sort({ number: -1 })
+      .limit(1);
+
+      body.number = lastInvoice.length > 0 ? lastInvoice[0].number + 1 : 1;
     }
 
-    const { items = [], taxRate = 0, discount = 0 } = value;
-
-    // Initialize totals
+    // Handle invoice
+    body.items = Array.isArray(body.items) ? body.items : [];
+    
+    // Calculate totals
     let subTotal = 0;
-    let taxTotal = 0;
-    let total = 0;
-
-    // Calculate subtotals, taxes, and item totals
-    items.map((item) => {
-      let itemTotal = calculate.multiply(item['quantity'], item['price']);
-      subTotal = calculate.add(subTotal, itemTotal);
-      item['total'] = itemTotal; // Update item with its total
+    body.items = body.items.map(item => {
+      if (item.quantity && item.price) {
+        const itemTotal = calculate.multiply(item.quantity, item.price);
+        subTotal = calculate.add(subTotal, itemTotal);
+        return { ...item, total: itemTotal };
+      }
+      return item;
     });
 
-    taxTotal = calculate.multiply(subTotal, taxRate / 100);
-    total = calculate.add(subTotal, taxTotal);
+    const taxTotal = calculate.multiply(subTotal, (body.taxRate || 0) / 100);
+    const total = calculate.add(subTotal, taxTotal);
 
-    // Determine payment status
-    let paymentStatus = calculate.sub(total, discount) === 0 ? 'paid' : 'unpaid';
+    // Prepare invoice data
+    body = {
+      ...body,
+      subTotal,
+      taxTotal,
+      total,
+      createdBy: req.admin._id,
+      paymentStatus: calculate.sub(total, (body.discount || 0)) === 0 ? 'paid' : 'unpaid',
+      date: body.date || new Date(),
+      expiredDate: body.expiredDate || new Date(),
+      year: body.year || new Date().getFullYear()
+    };
 
-    // Add calculated fields and admin reference
-    body['subTotal'] = subTotal;
-    body['taxTotal'] = taxTotal;
-    body['total'] = total;
-    body['items'] = items;
-    body['paymentStatus'] = paymentStatus;
-    body['createdBy'] = new mongoose.Types.ObjectId(req.admin._id); // Admin-specific ownership
+    // Save the invoice with validation disabled since it's a draft
+    const result = await new Model(body).save({ validateBeforeSave: true });
 
-    // Create a new invoice
-    const result = await new Model(body).save();
-
-    // Generate PDF immediately
+    // Generate PDF and save to PdfStorage
     const fileId = `invoice-${result._id}.pdf`;
-    const targetLocation = `src/public/download/invoice/${fileId}`; // Adjust path as needed
-    const info = { targetLocation, format: 'A4' };
+    const info = { format: 'A4' };
 
+    // Generate and save PDF to PdfStorage
     await pdfController.generatePdf(
-      'Invoice', // Model name for the Pug template
+      'Invoice',
       info,
-      result, // Invoice data
-      null, // Callback (optional)
-      req.admin._id // Admin ID
+      result,
+      null,
+      req.admin._id
     );
 
-    // Update invoice with the file reference
+    // Update invoice with PDF reference
     const updateResult = await Model.findOneAndUpdate(
-      { _id: result._id, createdBy: body['createdBy'] },
+      { _id: result._id },
       { pdf: fileId },
       { new: true }
     ).exec();
 
-    // Increment the last invoice number setting
-    await increaseBySettingKey({
+    // Increment invoice number
+    const settingsUpdate = await increaseBySettingKey({
       settingKey: 'last_invoice_number',
-      userId: req.admin._id,
+      userId: req.admin._id
     });
 
-    // Return success response
+    if (!settingsUpdate) {
+      console.error('Failed to increment invoice number');
+    }
+
     return res.status(200).json({
       success: true,
       result: updateResult,
-      message: 'Invoice created successfully.',
+      message: 'Invoice saved as draft'
     });
+
   } catch (error) {
     console.error('Error creating invoice:', error);
     return res.status(500).json({
       success: false,
       result: null,
-      message: 'Internal server error',
-      error: error.message,
+      message: error.message || 'Internal server error'
     });
   }
 };

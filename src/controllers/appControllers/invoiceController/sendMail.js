@@ -6,6 +6,8 @@ const { SendInvoice, SendQuote, SendPaymentReceipt } = require('@/emailTemplate/
 const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
+const PdfStorage = require('@/models/appModels/PdfStorage');
 
 const mail = async (req, res) => {
   try {
@@ -41,6 +43,18 @@ const mail = async (req, res) => {
       });
     }
 
+    // Fetch PDF from PdfStorage
+    const pdfDoc = await PdfStorage.findOne({
+      modelName: 'Invoice',
+      documentId: invoice._id
+    });
+
+    if (!pdfDoc || !pdfDoc.pdfData) {
+      return res.status(404).json({
+        success: false,
+        message: 'PDF document not found'
+      });
+    }
     // Fetch the client's email based on the client ID in the invoice
     const client = await Client.findById(invoice.client).lean();
     if (!client) {
@@ -76,29 +90,31 @@ const mail = async (req, res) => {
       time: new Date(),
     });
     
-
+    console.log('BREVO_USER:', process.env.BREVO_USER);
+    console.log('BREVO_USERPASS:', process.env.BREVO_USERPASS);
     // Configure nodemailer transport
     const transporter = nodemailer.createTransport({
       host: 'smtp-relay.brevo.com',
       port: 587,
       secure: false, // Use TLS
       auth: {
-        user: '8213fc001@smtp-brevo.com', // Your Brevo SMTP username
-        pass: 'BS9D1I2F6gpNtqkb',        // Your Brevo SMTP password
+        user: "85c3c0001@smtp-brevo.com", // Your Brevo SMTP username
+        pass: "P0V9IMJp5rn6E4KW",        // Your Brevo SMTP password
       },
     });
 
     // Email options
     const mailOptions = {
-      from: `"Thembi CRM" <noreply@thembi.kizuri.co.za>`,
+      from: `"Thembi CRM" <munekayiantoine@gmail.com>`,
       to: client.email,
       subject: `Invoice #${invoice.number} - ${invoice.year} From ${admin.name}`,
       html: htmlBody,
       replyTo: senderEmail,
       attachments: [
         {
-          filename: `Invoice-${invoice.number}.pdf`, // Customize the filename
-          path: path.resolve(__dirname, `../../../public/download/invoice/${invoice.pdf}`), // Correct absolute path
+         // filename: `Invoice-${invoice.number}.pdf`, // Customize the filename
+          filename: pdfDoc.filename,
+          content: pdfDoc.pdfData, // Use the PDF data from database
           contentType: 'application/pdf', // MIME type
         },
       ],
@@ -106,7 +122,16 @@ const mail = async (req, res) => {
     
 
     // Send email
-    const info = await transporter.sendMail(mailOptions);
+   // const info = await transporter.sendMail(mailOptions);
+
+    const info = await transporter.sendMail(mailOptions).then(info => {
+      console.log('Message sent: %s', info.messageId);
+      console.log('Preview URL: %s', nodemailer.getTestMessageUrl(info));
+  }).catch(error => {
+      console.error('Detailed error:', error);
+  });
+    // Update invoice status to "sent" after successful email delivery
+    await Invoice.findByIdAndUpdate(jsonData.id, { status: 'sent' });
 
     return res.status(200).json({
       success: true,
